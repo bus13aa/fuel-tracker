@@ -2,25 +2,35 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { supabase } from '@/lib/supabaseClient';
 
+// ========== Вспомогательная функция ==========
 async function getCurrentUser() {
   const cookieStore = await cookies();
   const userId = cookieStore.get('userId')?.value;
   console.log('[getCurrentUser] userId from cookie:', userId);
   if (!userId) return null;
+
   const numericUserId = Number(userId);
+  if (isNaN(numericUserId)) {
+    console.error('[getCurrentUser] userId is not a number:', userId);
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('users')
     .select('id, role')
     .eq('id', numericUserId)
     .single();
+
   if (error) {
     console.error('[getCurrentUser] Supabase error:', error);
     return null;
   }
+
   console.log('[getCurrentUser] user from DB:', data);
   return data;
 }
 
+// ========== POST – добавление записи ==========
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   console.log('[POST] user =', user);
@@ -41,11 +51,24 @@ export async function POST(request: Request) {
       );
     }
 
+    // Проверяем car_id
+    const carIdNum = Number(car_id);
+    if (isNaN(carIdNum)) {
+      console.error('[POST] Invalid car_id:', car_id);
+      return NextResponse.json({ error: 'Неверный идентификатор автомобиля' }, { status: 400 });
+    }
+
+    const litersNum = Number(liters);
+    if (isNaN(litersNum) || litersNum <= 0) {
+      console.error('[POST] Invalid liters:', liters);
+      return NextResponse.json({ error: 'Неверное количество литров' }, { status: 400 });
+    }
+
     const insertData = {
       date,
-      car_id: Number(car_id),
-      liters: Number(liters),
-      user_id: Number(user.id)
+      car_id: carIdNum,
+      liters: litersNum,
+      user_id: user.id, // user.id уже число
     };
     console.log('[POST] Insert data:', insertData);
 
@@ -56,7 +79,10 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('[POST] Supabase insert error:', error);
-      throw error;
+      return NextResponse.json(
+        { error: `Ошибка базы данных: ${error.message}` },
+        { status: 500 }
+      );
     }
 
     console.log('[POST] Insert success:', data);
@@ -67,6 +93,7 @@ export async function POST(request: Request) {
   }
 }
 
+// ========== GET – получение записей ==========
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
@@ -86,14 +113,15 @@ export async function GET(request: Request) {
       return NextResponse.json(data);
     }
 
+    // Используем JOIN через SQL, чтобы получить username
     let query = supabase
       .from('fuel_readings')
       .select(`
         id,
         date,
         liters,
-        car:cars (name),
-        user:users (username)
+        car:cars(name),
+        users(username)
       `)
       .order('date', { ascending: true });
 
@@ -113,7 +141,7 @@ export async function GET(request: Request) {
       date: item.date,
       car: item.car?.name || 'Неизвестно',
       liters: item.liters,
-      user: item.user?.username || 'Неизвестно',
+      user: item.users?.username || 'Неизвестно',
     }));
 
     return NextResponse.json(formatted);
@@ -123,6 +151,7 @@ export async function GET(request: Request) {
   }
 }
 
+// ========== DELETE – удаление записи ==========
 export async function DELETE(request: Request) {
   const user = await getCurrentUser();
   if (!user) {

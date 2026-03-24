@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface FuelReading {
   id: number;
@@ -11,38 +12,77 @@ interface FuelReading {
 }
 
 export default function JournalPage() {
+  const router = useRouter();
   const [readings, setReadings] = useState<FuelReading[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [carFilter, setCarFilter] = useState<number | ''>('');
   const [cars, setCars] = useState<{ id: number; name: string }[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+  // Проверка авторизации (один раз)
   useEffect(() => {
     fetch('/api/auth/me')
       .then(res => res.json())
-      .then(data => setUserRole(data.user?.role || null));
-  }, []);
+      .then(data => {
+        if (!data.user) router.push('/login');
+        else setUserRole(data.user.role);
+        setLoading(false);
+      });
+  }, [router]);
 
-  const fetchCars = async () => {
-    const res = await fetch('/api/fuel-readings?cars=true');
-    const data = await res.json();
-    setCars(data);
-  };
+  // Загрузка списка автомобилей (один раз)
+  useEffect(() => {
+    if (!loading && userRole) {
+      fetch('/api/fuel-readings?cars=true')
+        .then(res => res.json())
+        .then(data => setCars(data))
+        .catch(console.error);
+    }
+  }, [loading, userRole]);
 
-  const fetchReadings = async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (fromDate) params.append('from', fromDate);
-    if (toDate) params.append('to', toDate);
-    if (carFilter) params.append('car_id', String(carFilter));
-    const res = await fetch(`/api/fuel-readings?${params.toString()}`);
-    const data = await res.json();
-    setReadings(data);
-    setLoading(false);
-  };
+  // Функция загрузки записей (стабильная)
+  const fetchReadings = useCallback(async () => {
+    if (loading) return;
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (fromDate) params.append('from', fromDate);
+      if (toDate) params.append('to', toDate);
+      if (carFilter) params.append('car_id', String(carFilter));
+      const res = await fetch(`/api/fuel-readings?${params.toString()}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setReadings(data);
+      } else {
+        console.error('API returned non-array:', data);
+        setReadings([]);
+        if (data.error) setError(data.error);
+        else setError('Неизвестная ошибка загрузки');
+      }
+    } catch (err) {
+      console.error(err);
+      setReadings([]);
+      setError('Ошибка сети');
+    }
+  }, [fromDate, toDate, carFilter, loading]);
 
+  // Загрузка записей при изменении фильтров (и один раз при монтировании)
+  useEffect(() => {
+    if (!loading) {
+      if (isInitialLoad) {
+        setIsInitialLoad(false);
+        fetchReadings();
+      } else {
+        fetchReadings();
+      }
+    }
+  }, [fromDate, toDate, carFilter, loading, fetchReadings, isInitialLoad]);
+
+  // Удаление записи
   const deleteReading = async (id: number) => {
     if (!confirm('Удалить запись?')) return;
     const res = await fetch(`/api/fuel-readings?id=${id}`, { method: 'DELETE' });
@@ -50,12 +90,9 @@ export default function JournalPage() {
     else alert('Ошибка удаления');
   };
 
-  useEffect(() => {
-    fetchCars();
-    fetchReadings();
-  }, []);
+  const totalLiters = Array.isArray(readings) ? readings.reduce((sum, r) => sum + r.liters, 0) : 0;
 
-  const totalLiters = readings.reduce((sum, r) => sum + r.liters, 0);
+  if (loading) return <div className="p-8">Загрузка...</div>;
 
   return (
     <main className="p-8 max-w-6xl mx-auto">
@@ -103,10 +140,11 @@ export default function JournalPage() {
         </div>
       </div>
 
-      {loading && <p>Загрузка...</p>}
-      {!loading && readings.length === 0 && <p>Нет записей.</p>}
-
-      {readings.length > 0 && (
+      {error && <p className="text-red-500 mb-4">Ошибка: {error}</p>}
+      {!loading && !error && (!Array.isArray(readings) || readings.length === 0) && (
+        <p>Нет записей.</p>
+      )}
+      {!loading && !error && Array.isArray(readings) && readings.length > 0 && (
         <>
           <table className="w-full border-collapse border border-gray-300">
             <thead>
@@ -116,7 +154,7 @@ export default function JournalPage() {
                 <th className="border border-gray-300 px-4 py-2 text-right">Литры</th>
                 <th className="border border-gray-300 px-4 py-2">Пользователь</th>
                 {userRole === 'admin' && <th className="border border-gray-300 px-4 py-2">Действия</th>}
-              </tr>
+               </tr>
             </thead>
             <tbody>
               {readings.map((r) => (
