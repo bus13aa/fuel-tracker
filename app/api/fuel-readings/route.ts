@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 
-// POST – добавление записи
 export async function POST(request: Request) {
   try {
     const { date, car_id, liters } = await request.json();
@@ -16,7 +15,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('fuel_readings')
       .insert([{ date, car_id, liters }])
-      .select('*');
+      .select();
 
     if (error) throw error;
 
@@ -27,7 +26,6 @@ export async function POST(request: Request) {
   }
 }
 
-// GET – получение записей и списка автомобилей
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -65,7 +63,7 @@ export async function GET(request: Request) {
     if (error) throw error;
 
     // Преобразуем данные в удобный формат (плоский)
-    const formatted = data.map(item => ({
+    const formatted = (data as any[]).map(item => ({
       id: item.id,
       date: item.date,
       car: item.car?.name || 'Неизвестно',
