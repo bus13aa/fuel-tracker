@@ -10,14 +10,16 @@ export default function Navbar() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
 
+  const fetchUser = async () => {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    setUserRole(data.user?.role || null);
+    setUsername(data.user?.username || null);
+  };
+
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        setUserRole(data.user?.role || null);
-        setUsername(data.user?.username || null);
-      });
-  }, []);
+    fetchUser();
+  }, [pathname]); // ← перезапрос при каждой смене страницы
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
