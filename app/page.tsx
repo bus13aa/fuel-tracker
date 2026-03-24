@@ -1,27 +1,46 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+interface Car {
+  id: number;
+  name: string;
+}
 
 export default function Home() {
   const [date, setDate] = useState('');
-  const [car, setCar] = useState('');
+  const [carId, setCarId] = useState<number | ''>('');
   const [liters, setLiters] = useState('');
   const [message, setMessage] = useState('');
+  const [cars, setCars] = useState<Car[]>([]);
+
+  useEffect(() => {
+    // Загружаем список автомобилей
+    fetch('/api/fuel-readings?cars=true')
+      .then(res => res.json())
+      .then(data => setCars(data))
+      .catch(console.error);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
 
+    if (!carId) {
+      setMessage('❌ Выберите автомобиль');
+      return;
+    }
+
     const res = await fetch('/api/fuel-readings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, car, liters: parseFloat(liters) }),
+      body: JSON.stringify({ date, car_id: carId, liters: parseFloat(liters) }),
     });
 
     if (res.ok) {
       setMessage('✅ Запись сохранена');
       setDate('');
-      setCar('');
+      setCarId('');
       setLiters('');
     } else {
       const data = await res.json();
@@ -46,15 +65,18 @@ export default function Home() {
         </div>
         <div>
           <label htmlFor="car" className="block text-sm font-medium mb-1">Автомобиль</label>
-          <input
-            type="text"
+          <select
             id="car"
-            value={car}
-            onChange={(e) => setCar(e.target.value)}
+            value={carId}
+            onChange={(e) => setCarId(Number(e.target.value))}
             required
             className="w-full border border-gray-300 rounded px-3 py-2"
-            placeholder="Например: Toyota Camry"
-          />
+          >
+            <option value="">Выберите автомобиль</option>
+            {cars.map((car) => (
+              <option key={car.id} value={car.id}>{car.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label htmlFor="liters" className="block text-sm font-medium mb-1">Литры</label>

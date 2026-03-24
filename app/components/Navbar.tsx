@@ -7,6 +7,7 @@ export default function Navbar() {
   const links = [
     { href: '/', label: 'Ввод расхода' },
     { href: '/report', label: 'Отчёт' },
+    { href: '/cars', label: 'Автомобили' },
   ];
   return (
     <nav className="bg-gray-800 text-white p-4">

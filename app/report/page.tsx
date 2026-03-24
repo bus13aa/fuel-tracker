@@ -9,36 +9,39 @@ interface FuelReading {
   liters: number;
 }
 
+interface Car {
+  id: number;
+  name: string;
+}
+
 export default function ReportPage() {
   const [readings, setReadings] = useState<FuelReading[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [carFilter, setCarFilter] = useState('');
-  const [cars, setCars] = useState<string[]>([]);
+  const [carFilter, setCarFilter] = useState<number | ''>('');
+  const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Загружаем список автомобилей для фильтра
+  useEffect(() => {
+    fetch('/api/fuel-readings?cars=true')
+      .then(res => res.json())
+      .then(data => setCars(data))
+      .catch(console.error);
+  }, []);
 
   const fetchReport = async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (fromDate) params.append('from', fromDate);
     if (toDate) params.append('to', toDate);
-    if (carFilter) params.append('car', carFilter);
+    if (carFilter) params.append('car_id', String(carFilter));
 
     const res = await fetch(`/api/fuel-readings?${params.toString()}`);
     const data = await res.json();
     setReadings(data);
     setLoading(false);
   };
-
-  // Загружаем уникальные автомобили для фильтра
-  useEffect(() => {
-    const fetchCars = async () => {
-      const res = await fetch('/api/fuel-readings?cars=true');
-      const data = await res.json();
-      setCars(data.cars || []);
-    };
-    fetchCars();
-  }, []);
 
   useEffect(() => {
     fetchReport();
@@ -73,12 +76,12 @@ export default function ReportPage() {
           <label className="block text-sm font-medium mb-1">Автомобиль</label>
           <select
             value={carFilter}
-            onChange={(e) => setCarFilter(e.target.value)}
+            onChange={(e) => setCarFilter(e.target.value ? Number(e.target.value) : '')}
             className="border border-gray-300 rounded px-3 py-2 w-full"
           >
             <option value="">Все</option>
             {cars.map((car) => (
-              <option key={car} value={car}>{car}</option>
+              <option key={car.id} value={car.id}>{car.name}</option>
             ))}
           </select>
         </div>
@@ -103,7 +106,7 @@ export default function ReportPage() {
                 <th className="border border-gray-300 px-4 py-2">Дата</th>
                 <th className="border border-gray-300 px-4 py-2">Автомобиль</th>
                 <th className="border border-gray-300 px-4 py-2 text-right">Литры</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
               {readings.map((r) => (

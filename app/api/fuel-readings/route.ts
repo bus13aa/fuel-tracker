@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 
+// POST – добавление записи
 export async function POST(request: Request) {
   try {
-    const { date, car, liters } = await request.json();
+    const { date, car_id, liters } = await request.json();
 
-    if (!date || !car || liters === undefined) {
+    if (!date || !car_id || liters === undefined) {
       return NextResponse.json(
         { error: 'Не указаны дата, автомобиль или количество литров' },
         { status: 400 }
@@ -14,8 +15,8 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from('fuel_readings')
-      .insert([{ date, car, liters }])
-      .select();
+      .insert([{ date, car_id, liters }])
+      .select('*');
 
     if (error) throw error;
 
@@ -26,39 +27,52 @@ export async function POST(request: Request) {
   }
 }
 
+// GET – получение записей и списка автомобилей
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
-    const car = searchParams.get('car');
+    const car_id = searchParams.get('car_id');
     const carsOnly = searchParams.get('cars') === 'true';
 
+    // Возвращаем список автомобилей для выпадающего списка
     if (carsOnly) {
-      // Получаем список уникальных автомобилей
       const { data, error } = await supabase
-        .from('fuel_readings')
-        .select('car')
-        .order('car');
-
+        .from('cars')
+        .select('id, name')
+        .order('name');
       if (error) throw error;
-      const uniqueCars = [...new Map(data.map(item => [item.car, item.car])).values()];
-      return NextResponse.json({ cars: uniqueCars });
+      return NextResponse.json(data);
     }
 
-    // Основной запрос на получение записей
-    let query = supabase.from('fuel_readings').select('*');
+    // Основной запрос: получаем записи с названием автомобиля
+    let query = supabase
+      .from('fuel_readings')
+      .select(`
+        id,
+        date,
+        liters,
+        car:cars (name)
+      `)
+      .order('date', { ascending: true });
 
     if (fromDate) query = query.gte('date', fromDate);
     if (toDate) query = query.lte('date', toDate);
-    if (car) query = query.eq('car', car);
-
-    query = query.order('date', { ascending: true });
+    if (car_id) query = query.eq('car_id', Number(car_id));
 
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json(data);
+    // Преобразуем данные в удобный формат (плоский)
+    const formatted = data.map(item => ({
+      id: item.id,
+      date: item.date,
+      car: item.car?.name || 'Неизвестно',
+      liters: item.liters
+    }));
+
+    return NextResponse.json(formatted);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
