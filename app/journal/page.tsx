@@ -7,51 +7,59 @@ interface FuelReading {
   date: string;
   car: string;
   liters: number;
+  user: string;
 }
 
-interface Car {
-  id: number;
-  name: string;
-}
-
-export default function ReportPage() {
+export default function JournalPage() {
   const [readings, setReadings] = useState<FuelReading[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [carFilter, setCarFilter] = useState<number | ''>('');
-  const [cars, setCars] = useState<Car[]>([]);
+  const [cars, setCars] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  // Загружаем список автомобилей для фильтра
   useEffect(() => {
-    fetch('/api/fuel-readings?cars=true')
+    fetch('/api/auth/me')
       .then(res => res.json())
-      .then(data => setCars(data))
-      .catch(console.error);
+      .then(data => setUserRole(data.user?.role || null));
   }, []);
 
-  const fetchReport = async () => {
+  const fetchCars = async () => {
+    const res = await fetch('/api/fuel-readings?cars=true');
+    const data = await res.json();
+    setCars(data);
+  };
+
+  const fetchReadings = async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (fromDate) params.append('from', fromDate);
     if (toDate) params.append('to', toDate);
     if (carFilter) params.append('car_id', String(carFilter));
-
     const res = await fetch(`/api/fuel-readings?${params.toString()}`);
     const data = await res.json();
     setReadings(data);
     setLoading(false);
   };
 
+  const deleteReading = async (id: number) => {
+    if (!confirm('Удалить запись?')) return;
+    const res = await fetch(`/api/fuel-readings?id=${id}`, { method: 'DELETE' });
+    if (res.ok) fetchReadings();
+    else alert('Ошибка удаления');
+  };
+
   useEffect(() => {
-    fetchReport();
+    fetchCars();
+    fetchReadings();
   }, []);
 
   const totalLiters = readings.reduce((sum, r) => sum + r.liters, 0);
 
   return (
     <main className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Отчёт по расходу топлива</h1>
+      <h1 className="text-2xl font-bold mb-6">Журнал операций</h1>
 
       <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div>
@@ -80,14 +88,14 @@ export default function ReportPage() {
             className="border border-gray-300 rounded px-3 py-2 w-full"
           >
             <option value="">Все</option>
-            {cars.map((car) => (
+            {cars.map(car => (
               <option key={car.id} value={car.id}>{car.name}</option>
             ))}
           </select>
         </div>
         <div>
           <button
-            onClick={fetchReport}
+            onClick={fetchReadings}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full"
           >
             Применить фильтр
@@ -96,7 +104,7 @@ export default function ReportPage() {
       </div>
 
       {loading && <p>Загрузка...</p>}
-      {!loading && readings.length === 0 && <p>Нет записей за выбранный период.</p>}
+      {!loading && readings.length === 0 && <p>Нет записей.</p>}
 
       {readings.length > 0 && (
         <>
@@ -106,7 +114,9 @@ export default function ReportPage() {
                 <th className="border border-gray-300 px-4 py-2">Дата</th>
                 <th className="border border-gray-300 px-4 py-2">Автомобиль</th>
                 <th className="border border-gray-300 px-4 py-2 text-right">Литры</th>
-               </tr>
+                <th className="border border-gray-300 px-4 py-2">Пользователь</th>
+                {userRole === 'admin' && <th className="border border-gray-300 px-4 py-2">Действия</th>}
+              </tr>
             </thead>
             <tbody>
               {readings.map((r) => (
@@ -114,6 +124,17 @@ export default function ReportPage() {
                   <td className="border border-gray-300 px-4 py-2">{r.date}</td>
                   <td className="border border-gray-300 px-4 py-2">{r.car}</td>
                   <td className="border border-gray-300 px-4 py-2 text-right">{r.liters}</td>
+                  <td className="border border-gray-300 px-4 py-2">{r.user}</td>
+                  {userRole === 'admin' && (
+                    <td className="border border-gray-300 px-4 py-2 text-center">
+                      <button
+                        onClick={() => deleteReading(r.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Удалить
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
