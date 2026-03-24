@@ -3,7 +3,8 @@ import { cookies } from 'next/headers';
 import { supabase } from '@/lib/supabaseClient';
 
 export async function GET() {
-  const userId = cookies().get('userId')?.value;
+  const cookieStore = await cookies();
+  const userId = cookieStore.get('userId')?.value;
   if (!userId) {
     return NextResponse.json({ user: null });
   }

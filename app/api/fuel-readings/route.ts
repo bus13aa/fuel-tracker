@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { supabase } from '@/lib/supabaseClient';
 
-// Вспомогательная функция для получения текущего пользователя
 async function getCurrentUser() {
-  const userId = cookies().get('userId')?.value;
+  const cookieStore = await cookies();
+  const userId = cookieStore.get('userId')?.value;
   if (!userId) return null;
   const { data } = await supabase.from('users').select('id, role').eq('id', userId).single();
   return data;
@@ -66,7 +66,6 @@ export async function GET(request: Request) {
       `)
       .order('date', { ascending: true });
 
-    // Если не админ, показываем только свои записи
     if (user.role !== 'admin') {
       query = query.eq('user_id', user.id);
     }
@@ -92,6 +91,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }
+
 export async function DELETE(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
@@ -101,7 +101,6 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Не указан id' }, { status: 400 });
 
-    // Если не админ, проверяем, что запись принадлежит ему
     if (user.role !== 'admin') {
       const { data: reading } = await supabase
         .from('fuel_readings')

@@ -3,7 +3,8 @@ import { cookies } from 'next/headers';
 import { supabase } from '@/lib/supabaseClient';
 
 async function checkAdmin() {
-  const userId = cookies().get('userId')?.value;
+  const cookieStore = await cookies();
+  const userId = cookieStore.get('userId')?.value;
   if (!userId) return false;
   const { data } = await supabase.from('users').select('role').eq('id', userId).single();
   return data?.role === 'admin';
